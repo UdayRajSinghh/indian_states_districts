@@ -1,222 +1,261 @@
-from fastapi import FastAPI, HTTPException
-from typing import List, Dict, Optional
+from http.server import BaseHTTPRequestHandler
 import json
+import urllib.parse
 import os
-from pydantic import BaseModel
+from typing import Dict, Any, Optional
 
-app = FastAPI(title="Indian States and Districts API", version="1.0.0")
-
-# Data models
-class District(BaseModel):
-    name: str
-    code: Optional[str] = None
-
-class State(BaseModel):
-    name: str
-    code: str
-    districts: List[District]
-
-class StatesResponse(BaseModel):
-    states: List[Dict[str, str]]
-
-class DistrictsResponse(BaseModel):
-    state: str
-    districts: List[str]
-
-# Global variable to store data
-indian_data = {}
-
-def load_data():
-    """Load Indian states and districts data from JSON file"""
-    global indian_data
-    try:
-        # Try to load from the same directory
-        with open("indian_states_districts.json", "r", encoding="utf-8") as file:
-            indian_data = json.load(file)
-    except FileNotFoundError:
+class handler(BaseHTTPRequestHandler):
+    def __init__(self, *args, **kwargs):
+        self.indian_data = self.load_data()
+        super().__init__(*args, **kwargs)
+    
+    def load_data(self) -> Dict[str, Any]:
+        """Load Indian states and districts data from JSON file"""
         try:
-            # Try to load from parent directory
-            with open("../indian_states_districts.json", "r", encoding="utf-8") as file:
-                indian_data = json.load(file)
-        except FileNotFoundError:
-            # Fallback sample data if file doesn't exist
-            indian_data = {
+            # Try different possible paths for the JSON file
+            possible_paths = [
+                "indian_states_districts.json",
+                "../indian_states_districts.json", 
+                "./indian_states_districts.json",
+                "/var/task/indian_states_districts.json"
+            ]
+            
+            for path in possible_paths:
+                if os.path.exists(path):
+                    with open(path, "r", encoding="utf-8") as file:
+                        return json.load(file)
+            
+            # If no file found, return minimal fallback
+            return {
                 "states": {
                     "UP": {
                         "name": "Uttar Pradesh",
-                        "districts": [
-                            "Agra", "Aligarh", "Allahabad", "Ambedkar Nagar", "Amethi",
-                            "Amroha", "Auraiya", "Azamgarh", "Baghpat", "Bahraich",
-                            "Ballia", "Balrampur", "Banda", "Barabanki", "Bareilly",
-                            "Basti", "Bhadohi", "Bijnor", "Budaun", "Bulandshahr",
-                            "Chandauli", "Chitrakoot", "Deoria", "Etah", "Etawah",
-                            "Faizabad", "Farrukhabad", "Fatehpur", "Firozabad", "Gautam Buddha Nagar",
-                            "Ghaziabad", "Ghazipur", "Gonda", "Gorakhpur", "Hamirpur",
-                            "Hapur", "Hardoi", "Hathras", "Jalaun", "Jaunpur",
-                            "Jhansa", "Kannauj", "Kanpur Dehat", "Kanpur Nagar", "Kasganj",
-                            "Kaushambi", "Kheri", "Kushinagar", "Lalitpur", "Lucknow",
-                            "Maharajganj", "Mahoba", "Mainpuri", "Mathura", "Mau",
-                            "Meerut", "Mirzapur", "Moradabad", "Muzaffarnagar", "Pilibhit",
-                            "Pratapgarh", "Raebareli", "Rampur", "Saharanpur", "Sambhal",
-                            "Sant Kabir Nagar", "Shahjahanpur", "Shamli", "Shrawasti", "Siddharthnagar",
-                            "Sitapur", "Sonbhadra", "Sultanpur", "Unnao", "Varanasi"
-                        ]
+                        "districts": ["Agra", "Lucknow", "Kanpur", "Ghaziabad", "Varanasi"]
                     },
                     "MH": {
-                        "name": "Maharashtra",
-                        "districts": [
-                            "Ahmednagar", "Akola", "Amravati", "Aurangabad", "Beed",
-                            "Bhandara", "Buldhana", "Chandrapur", "Dhule", "Gadchiroli",
-                            "Gondia", "Hingoli", "Jalgaon", "Jalna", "Kolhapur",
-                            "Latur", "Mumbai City", "Mumbai Suburban", "Nagpur", "Nanded",
-                            "Nandurbar", "Nashik", "Osmanabad", "Palghar", "Parbhani",
-                            "Pune", "Raigad", "Ratnagiri", "Sangli", "Satara",
-                            "Sindhudurg", "Solapur", "Thane", "Wardha", "Washim", "Yavatmal"
-                        ]
-                    },
-                    "KA": {
-                        "name": "Karnataka",
-                        "districts": [
-                            "Bagalkot", "Ballari", "Belagavi", "Bengaluru Rural", "Bengaluru Urban",
-                            "Bidar", "Chamarajanagar", "Chikballapur", "Chikkamagaluru", "Chitradurga",
-                            "Dakshina Kannada", "Davangere", "Dharwad", "Gadag", "Hassan",
-                            "Haveri", "Kalaburagi", "Kodagu", "Kolar", "Koppal",
-                            "Mandya", "Mysuru", "Raichur", "Ramanagara", "Shivamogga",
-                            "Tumakuru", "Udupi", "Uttara Kannada", "Vijayapura", "Yadgir"
-                        ]
+                        "name": "Maharashtra", 
+                        "districts": ["Mumbai City", "Pune", "Nagpur", "Nashik", "Aurangabad"]
+                    }
+                }
+            }
+        except Exception as e:
+            # Fallback data in case of any error
+            return {
+                "states": {
+                    "UP": {
+                        "name": "Uttar Pradesh",
+                        "districts": ["Agra", "Lucknow", "Kanpur"]
                     }
                 }
             }
 
-# Load data immediately
-load_data()
+    def do_GET(self):
+        # Parse the URL and query parameters
+        parsed_url = urllib.parse.urlparse(self.path)
+        path = parsed_url.path
+        query_params = urllib.parse.parse_qs(parsed_url.query)
+        
+        # Set CORS headers
+        self.send_response(200)
+        self.send_header('Content-type', 'application/json')
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.end_headers()
+        
+        try:
+            response_data = self.route_request(path, query_params)
+            self.wfile.write(json.dumps(response_data, indent=2).encode())
+        except Exception as e:
+            error_response = {
+                "error": str(e),
+                "status": "error",
+                "path": path
+            }
+            self.wfile.write(json.dumps(error_response, indent=2).encode())
 
-# API Endpoints
-@app.get("/", summary="API Information")
-async def root():
-    return {
-        "message": "Indian States and Districts API",
-        "version": "1.0.0",
-        "status": "active",
-        "endpoints": {
-            "/states": "Get all states",
-            "/states/{state_code}": "Get specific state info",
-            "/states/{state_code}/districts": "Get districts of a state",
-            "/search/states": "Search states by name",
-            "/search/districts": "Search districts by name",
-            "/health": "Health check"
+    def do_OPTIONS(self):
+        # Handle CORS preflight requests
+        self.send_response(200)
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.end_headers()
+
+    def route_request(self, path: str, query_params: Dict) -> Dict[str, Any]:
+        """Route the request to appropriate handler"""
+        
+        # Remove trailing slash
+        path = path.rstrip('/')
+        
+        # Root endpoint
+        if path == '' or path == '/':
+            return self.get_root()
+        
+        # Health check
+        elif path == '/health':
+            return self.get_health()
+        
+        # Get all states
+        elif path == '/states':
+            return self.get_all_states()
+        
+        # Get specific state or state districts
+        elif path.startswith('/states/'):
+            path_parts = path.split('/')
+            if len(path_parts) == 3:  # /states/{state_code}
+                state_code = path_parts[2].upper()
+                return self.get_state(state_code)
+            elif len(path_parts) == 4 and path_parts[3] == 'districts':  # /states/{state_code}/districts
+                state_code = path_parts[2].upper()
+                return self.get_state_districts(state_code)
+        
+        # Search endpoints
+        elif path == '/search/states':
+            query = query_params.get('q', [''])[0]
+            return self.search_states(query)
+        
+        elif path == '/search/districts':
+            query = query_params.get('q', [''])[0]
+            state_code = query_params.get('state_code', [None])[0]
+            return self.search_districts(query, state_code)
+        
+        # Stats endpoint
+        elif path == '/stats':
+            return self.get_stats()
+        
+        # 404 for unknown endpoints
+        else:
+            raise Exception(f"Endpoint not found: {path}")
+
+    def get_root(self) -> Dict[str, Any]:
+        """Root endpoint information"""
+        return {
+            "message": "Indian States and Districts API",
+            "version": "1.0.0",
+            "status": "active",
+            "total_states": len(self.indian_data.get("states", {})),
+            "endpoints": {
+                "/health": "Health check",
+                "/states": "Get all states",
+                "/states/{state_code}": "Get specific state info",
+                "/states/{state_code}/districts": "Get districts of a state",
+                "/search/states?q={query}": "Search states by name",
+                "/search/districts?q={query}&state_code={code}": "Search districts",
+                "/stats": "Get API statistics"
+            }
         }
-    }
 
-@app.get("/health", summary="Health Check")
-async def health_check():
-    return {
-        "status": "healthy",
-        "message": "API is running",
-        "data_loaded": len(indian_data.get("states", {})) > 0
-    }
+    def get_health(self) -> Dict[str, Any]:
+        """Health check endpoint"""
+        return {
+            "status": "healthy",
+            "message": "API is running successfully",
+            "data_loaded": len(self.indian_data.get("states", {})) > 0,
+            "states_count": len(self.indian_data.get("states", {}))
+        }
 
-@app.get("/states", response_model=StatesResponse, summary="Get all states")
-async def get_all_states():
-    """Get list of all Indian states with their codes"""
-    states_list = [
-        {"name": state_info["name"], "code": state_code}
-        for state_code, state_info in indian_data["states"].items()
-    ]
-    return {"states": states_list}
+    def get_all_states(self) -> Dict[str, Any]:
+        """Get all states"""
+        states_list = [
+            {"name": state_info["name"], "code": state_code}
+            for state_code, state_info in self.indian_data["states"].items()
+        ]
+        return {"states": states_list}
 
-@app.get("/states/{state_code}", summary="Get state information")
-async def get_state(state_code: str):
-    """Get detailed information about a specific state"""
-    state_code = state_code.upper()
-    
-    if state_code not in indian_data["states"]:
-        raise HTTPException(status_code=404, detail="State not found")
-    
-    state_info = indian_data["states"][state_code]
-    return {
-        "code": state_code,
-        "name": state_info["name"],
-        "districts_count": len(state_info["districts"]),
-        "districts": state_info["districts"]
-    }
+    def get_state(self, state_code: str) -> Dict[str, Any]:
+        """Get specific state information"""
+        if state_code not in self.indian_data["states"]:
+            raise Exception(f"State '{state_code}' not found")
+        
+        state_info = self.indian_data["states"][state_code]
+        return {
+            "code": state_code,
+            "name": state_info["name"],
+            "districts_count": len(state_info["districts"]),
+            "districts": state_info["districts"]
+        }
 
-@app.get("/states/{state_code}/districts", response_model=DistrictsResponse, summary="Get districts of a state")
-async def get_state_districts(state_code: str):
-    """Get all districts of a specific state"""
-    state_code = state_code.upper()
-    
-    if state_code not in indian_data["states"]:
-        raise HTTPException(status_code=404, detail="State not found")
-    
-    state_info = indian_data["states"][state_code]
-    return {
-        "state": state_info["name"],
-        "districts": state_info["districts"]
-    }
+    def get_state_districts(self, state_code: str) -> Dict[str, Any]:
+        """Get districts of a specific state"""
+        if state_code not in self.indian_data["states"]:
+            raise Exception(f"State '{state_code}' not found")
+        
+        state_info = self.indian_data["states"][state_code]
+        return {
+            "state": state_info["name"],
+            "state_code": state_code,
+            "districts": state_info["districts"],
+            "count": len(state_info["districts"])
+        }
 
-@app.get("/search/states", summary="Search states by name")
-async def search_states(q: str):
-    """Search for states by name (partial match)"""
-    if len(q) < 2:
-        raise HTTPException(status_code=400, detail="Query must be at least 2 characters long")
-    
-    results = []
-    query = q.lower()
-    
-    for state_code, state_info in indian_data["states"].items():
-        if query in state_info["name"].lower():
-            results.append({
-                "code": state_code,
-                "name": state_info["name"]
-            })
-    
-    return {"query": q, "results": results}
-
-@app.get("/search/districts", summary="Search districts by name")
-async def search_districts(q: str, state_code: Optional[str] = None):
-    """Search for districts by name (partial match). Optionally filter by state."""
-    if len(q) < 2:
-        raise HTTPException(status_code=400, detail="Query must be at least 2 characters long")
-    
-    results = []
-    query = q.lower()
-    
-    states_to_search = indian_data["states"]
-    if state_code:
-        state_code = state_code.upper()
-        if state_code not in indian_data["states"]:
-            raise HTTPException(status_code=404, detail="State not found")
-        states_to_search = {state_code: indian_data["states"][state_code]}
-    
-    for s_code, state_info in states_to_search.items():
-        for district in state_info["districts"]:
-            if query in district.lower():
+    def search_states(self, query: str) -> Dict[str, Any]:
+        """Search states by name"""
+        if len(query) < 2:
+            raise Exception("Query must be at least 2 characters long")
+        
+        results = []
+        query_lower = query.lower()
+        
+        for state_code, state_info in self.indian_data["states"].items():
+            if query_lower in state_info["name"].lower():
                 results.append({
-                    "district": district,
-                    "state": state_info["name"],
-                    "state_code": s_code
+                    "code": state_code,
+                    "name": state_info["name"]
                 })
-    
-    return {"query": q, "state_filter": state_code, "results": results}
+        
+        return {
+            "query": query,
+            "results": results,
+            "count": len(results)
+        }
 
-@app.get("/stats", summary="Get API statistics")
-async def get_stats():
-    """Get statistics about the data"""
-    total_states = len(indian_data["states"])
-    total_districts = sum(len(state_info["districts"]) for state_info in indian_data["states"].values())
-    
-    return {
-        "total_states": total_states,
-        "total_districts": total_districts,
-        "states_breakdown": {
-            state_code: {
+    def search_districts(self, query: str, state_code: Optional[str] = None) -> Dict[str, Any]:
+        """Search districts by name"""
+        if len(query) < 2:
+            raise Exception("Query must be at least 2 characters long")
+        
+        results = []
+        query_lower = query.lower()
+        
+        states_to_search = self.indian_data["states"]
+        if state_code:
+            state_code = state_code.upper()
+            if state_code not in self.indian_data["states"]:
+                raise Exception(f"State '{state_code}' not found")
+            states_to_search = {state_code: self.indian_data["states"][state_code]}
+        
+        for s_code, state_info in states_to_search.items():
+            for district in state_info["districts"]:
+                if query_lower in district.lower():
+                    results.append({
+                        "district": district,
+                        "state": state_info["name"],
+                        "state_code": s_code
+                    })
+        
+        return {
+            "query": query,
+            "state_filter": state_code,
+            "results": results,
+            "count": len(results)
+        }
+
+    def get_stats(self) -> Dict[str, Any]:
+        """Get API statistics"""
+        total_states = len(self.indian_data["states"])
+        total_districts = sum(len(state_info["districts"]) for state_info in self.indian_data["states"].values())
+        
+        states_breakdown = {}
+        for state_code, state_info in self.indian_data["states"].items():
+            states_breakdown[state_code] = {
                 "name": state_info["name"],
                 "districts_count": len(state_info["districts"])
             }
-            for state_code, state_info in indian_data["states"].items()
+        
+        return {
+            "total_states": total_states,
+            "total_districts": total_districts,
+            "average_districts_per_state": round(total_districts / total_states, 2) if total_states > 0 else 0,
+            "states_breakdown": states_breakdown
         }
-    }
-
-# Export the app for Vercel
-handler = app
